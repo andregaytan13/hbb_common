@@ -2159,11 +2159,6 @@ pub struct LocalConfig {
     size: Size,
     #[serde(default, deserialize_with = "deserialize_vec_string")]
     pub fav: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
-    options: HashMap<String, String>,
-    // Various data for flutter ui
-    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
-    ui_flutter: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_string")]
     betterdesk_connection_mode: String,
     #[serde(default)]
@@ -2174,6 +2169,11 @@ pub struct LocalConfig {
     betterdesk_connection_mode_status: String,
     #[serde(default, deserialize_with = "deserialize_string")]
     betterdesk_connection_mode_error: String,
+    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
+    options: HashMap<String, String>,
+    // Various data for flutter ui
+    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
+    ui_flutter: HashMap<String, String>,
 }
 
 impl LocalConfig {
@@ -3431,6 +3431,39 @@ mod tests {
     use super::{permanent_password::PERMANENT_PASSWORD_ENC_VERSION, *};
 
     static CONFIG_STATE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_local_config_with_populated_maps_stores_as_toml() {
+        let mut config = LocalConfig::default();
+        config.options.insert("theme".into(), "dark".into());
+        config.ui_flutter.insert("language".into(), "es".into());
+
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "hbb-local-config-{}-{unique}.toml",
+            std::process::id()
+        ));
+
+        let stored = store_path(path.clone(), config);
+        let contents = if stored.is_ok() {
+            fs::read_to_string(&path).ok()
+        } else {
+            None
+        };
+        let _ = fs::remove_file(&path);
+
+        assert!(stored.is_ok(), "failed to store LocalConfig: {:?}", stored);
+        let contents = contents.expect("LocalConfig store did not create the TOML file");
+        let parsed: LocalConfig = toml::from_str(&contents).expect("stored TOML did not parse");
+        assert_eq!(parsed.options.get("theme").map(String::as_str), Some("dark"));
+        assert_eq!(
+            parsed.ui_flutter.get("language").map(String::as_str),
+            Some("es")
+        );
+    }
 
     struct ConfigStateTestGuard {
         original_config: Config,
